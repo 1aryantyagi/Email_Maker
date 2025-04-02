@@ -1,0 +1,13 @@
+Flask
+flask-cors
+flask-jwt-extended
+gunicorn
+werkzeug
+flask-sqlalchemy
+pandas
+requests
+bs4
+dotenv
+langchain
+langchain-openai
+psycopg2-binary
