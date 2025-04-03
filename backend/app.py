@@ -7,6 +7,7 @@ from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import inspect
 import os
 import pandas as pd
+import boto3
 from main import process_excel_to_csv
 
 from dotenv import load_dotenv
@@ -151,6 +152,47 @@ def register():
     db.session.commit()
 
     return jsonify({"msg": "User created successfully"}), 201
+
+
+@app.route('/send-emails', methods=['POST'])
+@jwt_required()
+def send_emails():
+    current_user = get_jwt_identity()
+    data = request.get_json()
+    emails = data.get('emails', [])
+
+    if not emails:
+        return jsonify({"error": "No emails provided"}), 400
+
+    records = CSVData.query.filter_by(username=current_user).filter(CSVData.email.in_(emails)).all()
+
+    # Check for missing emails...
+    
+    try:
+        ses_client = boto3.client('ses', region_name=os.getenv('AWS_REGION'))
+        sender_email = os.getenv('AWS_SES_SENDER_EMAIL')
+        for record in records:
+            # Extract subject from email_text
+            email_text = record.email_text
+            subject = "No Subject"  # Default
+            if email_text.startswith('Subject: '):
+                subject_line = email_text.split('\n', 1)[0]
+                subject = subject_line[len('Subject: '):].strip()
+            
+            # Send email with extracted subject
+            ses_client.send_email(
+                Source=sender_email,
+                Destination={'ToAddresses': [record.email]},
+                Message={
+                    'Subject': {'Data': subject, 'Charset': 'UTF-8'},
+                    'Body': {
+                        'Text': {'Data': email_text, 'Charset': 'UTF-8'}
+                    }
+                }
+            )
+        return jsonify({"msg": "Emails sent successfully"}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
